@@ -64,6 +64,7 @@ npm run dev
 | 数据查询 | `query` | 查询定义 | 定义编号、关联数据源、查询模板 |
 | 数据清洗 | `cleanse` | 清洗规则 | 规则编号、关联数据集、空值策略 |
 | 调用日志 | `log` | 日志记录 | 记录编号、调用服务、请求时间 |
+| 调用日志归档 | `log_archive` | 归档窗口/归档数据集 | 归档窗口、记录数量、来源编号、清单哈希 |
 | 模拟数据 | `mock` | 模拟规则 | 规则编号、关联服务、触发条件 |
 | 数据备份 | `backup` | 备份策略 | 策略编号、目标服务、备份周期 |
 | 事件通知 | `notify` | 通知规则 | 规则编号、触发事件、通知渠道 |
@@ -77,3 +78,20 @@ npm run dev
 
 领域：数据工程
 子方向：数据分析与数据应用
+
+## 调用日志归档链路
+
+标准化日志记录 → 按归档窗口写入调用日志归档数据集 → 检查点校验（记录数量、来源编号、
+审计记录可复核）→ 审计记录与日志归档契约在同一事务里提交，任一环节失败整体回滚，
+可用同一窗口编号从断点重做。
+
+- 后端入口：`app/services/log_archive.py`、`app/routers/log_archive.py`
+- 前端页面：`frontend/src/views/log-archive/`
+- 备份模块经 `GET /api/backup/archive-contracts` 读取与归档数据集同一份快照
+- 冲突优先级：来源版本高者胜 → 同版本状态优先级（已归档 > 记录中 > 草稿 > 已清理）→ 后到达者胜；
+  相同调用日志（来源编号 + 请求时间 + 调用服务）在同一窗口只保留一份记录与来源版本
+- 导出与打包：`/windows/{window_id}/export/{json|jsonl}` 下载清单，
+  `/windows/{window_id}/package` 下载含清单、审计、契约与校验说明的 zip；清单缺行拒绝导出
+- 回滚演练：创建窗口时传 `simulate_failure=stage|commit|verify` 制造事务中断
+- 测试：`cd backend && .venv/bin/python -m unittest discover -s tests -v`
+- 复测口径：以 LOG-0003 的 3 条日志归档，清单记录数量、大小、来源编号一致，重复归档不新增记录

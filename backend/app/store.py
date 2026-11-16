@@ -8,6 +8,15 @@ from typing import Any
 
 from app.seed import SEED_ROWS
 
+# 归档链路的内部表：不参与运营概览的业务模块统计，仅由归档服务直接访问
+INTERNAL_TABLES = {
+    "log_archive_window",
+    "log_archive",
+    "log_archive_audit",
+    "log_archive_contract",
+    "log_archive_txn",
+}
+
 
 class Store:
     def __init__(self) -> None:
@@ -15,8 +24,14 @@ class Store:
             name: [dict(row) for row in rows] for name, rows in SEED_ROWS.items()
         }
 
+    def reset(self) -> None:
+        """恢复初始示例数据：归档测试需要每个用例从同一份干净数据开始。"""
+        self._tables = {
+            name: [dict(row) for row in rows] for name, rows in SEED_ROWS.items()
+        }
+
     def module_names(self) -> list[str]:
-        return sorted(self._tables)
+        return sorted(name for name in self._tables if name not in INTERNAL_TABLES)
 
     def rows(self, module: str) -> list[dict[str, Any]]:
         return self._tables.setdefault(module, [])

@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas import ActionResult, EntryPayload, PageResult
 from app.services.backup import BackupService
+from app.services.log_archive import log_archive_service
 
 router = APIRouter(prefix="/api/backup", tags=["数据备份"])
 
@@ -28,6 +29,27 @@ def list_entries(
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
     items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
     return PageResult(items=items, total=total, page=page, size=size)
+
+
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出数据备份清单：返回当前过滤条件下的全量数据。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "backup", "total": total, "items": items}
+
+
+@router.get("/archive-contracts")
+def archive_contracts(
+    window_id: str | None = Query(default=None, description="按归档窗口读取契约快照"),
+) -> dict[str, Any]:
+    """日志归档契约消费入口：备份模块读取与归档数据集完全一致的同一快照。"""
+    contracts = log_archive_service.list_contracts(window_id)
+    return {
+        "module": "backup",
+        "consumer": "backup",
+        "total": len(contracts),
+        "items": contracts,
+    }
 
 
 @router.get("/{entry_id}", response_model=dict)
@@ -56,10 +78,3 @@ def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出数据备份清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "backup", "total": total, "items": items}
